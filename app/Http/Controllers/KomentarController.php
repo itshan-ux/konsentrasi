@@ -3,46 +3,90 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Komentar;
+use App\Models\Komentar_232187;
+use App\Models\Badword; // Hanya jika pakai database badword
 use Illuminate\Support\Facades\Auth;
 
 class KomentarController extends Controller
 {
-    // 🔹 Menampilkan halaman komentar (admin atau user)
+    // Menampilkan semua komentar
     public function index()
     {
+        $komentars = Komentar_232187::with('user')->latest()->get();
         $user = Auth::user();
 
-        if ($user && $user->role === 'admin') {
-            // Jika admin → tampilkan semua komentar
-            $komentars = Komentar::with('user')->latest()->get();
+        if($user && $user->role === 'admin'){
             return view('admin.komentar', compact('komentars'));
         } else {
-            // Jika user biasa → tampilkan komentar miliknya
-            $komentars = Komentar::where('user_id', Auth::id())->latest()->get();
-            return view('user.daftar_komentar', compact('komentars'));
+            return view('user.komentar', compact('komentars'));
         }
     }
 
-    // 🔹 Menampilkan form tulis komentar (user)
-    public function create()
-    {
-        return view('user.komentar');
-    }
-
-    // 🔹 Menyimpan komentar baru
+    // Menyimpan komentar + analisis sentimen otomatis
     public function store(Request $request)
     {
         $request->validate([
             'komentar' => 'required|string|max:500',
         ]);
 
-        Komentar::create([
+        // Hitung status sentimen
+        $status_sentimen = $this->analisisSentimen($request->komentar);
+
+        // Simpan komentar
+        $komentar = Komentar_232187::create([
             'user_id' => Auth::id(),
             'komentar' => $request->komentar,
-            'status_sentimen' => null, // nanti bisa diisi setelah analisis
+            'status_sentimen' => $status_sentimen
         ]);
 
-        return redirect()->route('komentar.index')->with('success', 'Komentar berhasil dikirim!');
+        // Kembalikan JSON untuk AJAX
+        return response()->json([
+            'success' => true,
+            'komentar' => [
+                'user_name' => $komentar->user->name ?? 'Anonim',
+                'komentar' => $komentar->komentar,
+                'status_sentimen' => $komentar->status_sentimen,
+                'created_at' => $komentar->created_at->format('d M Y H:i'),
+            ]
+        ]);
+    }
+
+    // Fungsi bantu analisis sentimen + badword filter
+    private function analisisSentimen($text)
+    {
+        $positifWords = ['baik', 'bagus', 'senang', 'suka', 'mantap', 'puas', 'hebat', 'terbaik'];
+        $negatifWords = ['buruk', 'jelek', 'marah', 'kecewa', 'sedih', 'benci', 'parah'];
+
+        // Hardcode badword filter (atau bisa ambil dari DB)
+        $badwordNegatif = ['bodoh', 'goblok', 'anjing', 'kampungan', 'tolol'];
+        $badwordPositif = ['hebat', 'luar biasa', 'mantap jiwa'];
+
+        // Lowercase & hapus tanda baca
+        $text = strtolower($text);
+        $text = str_replace([',', '.', '!', '?'], '', $text);
+
+        // Score biasa
+        $score = 0;
+        foreach ($positifWords as $word) {
+            if(str_contains($text, $word)) $score++;
+        }
+        foreach ($negatifWords as $word) {
+            if(str_contains($text, $word)) $score--;
+        }
+
+        // Cek badword negatif → langsung negatif
+        foreach ($badwordNegatif as $word) {
+            if(str_contains($text, $word)) return 'negatif';
+        }
+
+        // Cek badword positif → langsung positif
+        foreach ($badwordPositif as $word) {
+            if(str_contains($text, $word)) return 'positif';
+        }
+
+        // Score normal
+        if ($score > 0) return 'positif';
+        if ($score < 0) return 'negatif';
+        return 'netral';
     }
 }
