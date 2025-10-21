@@ -15,7 +15,7 @@ class KomentarController extends Controller
         $komentars = Komentar_232187::with('user')->latest()->get();
         $user = Auth::user();
 
-        if($user && $user->role === 'admin'){
+        if ($user && $user->role === 'admin') {
             return view('admin.komentar', compact('komentars'));
         } else {
             return view('user.komentar', compact('komentars'));
@@ -39,16 +39,7 @@ class KomentarController extends Controller
             'status_sentimen' => $status_sentimen
         ]);
 
-        // Kembalikan JSON untuk AJAX
-        return response()->json([
-            'success' => true,
-            'komentar' => [
-                'user_name' => $komentar->user->name ?? 'Anonim',
-                'komentar' => $komentar->komentar,
-                'status_sentimen' => $komentar->status_sentimen,
-                'created_at' => $komentar->created_at->format('d M Y H:i'),
-            ]
-        ]);
+        return redirect('/komentar')->with('Berhasil input');
     }
 
     // Fungsi bantu analisis sentimen + badword filter
@@ -68,20 +59,20 @@ class KomentarController extends Controller
         // Score biasa
         $score = 0;
         foreach ($positifWords as $word) {
-            if(str_contains($text, $word)) $score++;
+            if (str_contains($text, $word)) $score++;
         }
         foreach ($negatifWords as $word) {
-            if(str_contains($text, $word)) $score--;
+            if (str_contains($text, $word)) $score--;
         }
 
         // Cek badword negatif → langsung negatif
         foreach ($badwordNegatif as $word) {
-            if(str_contains($text, $word)) return 'negatif';
+            if (str_contains($text, $word)) return 'negatif';
         }
 
         // Cek badword positif → langsung positif
         foreach ($badwordPositif as $word) {
-            if(str_contains($text, $word)) return 'positif';
+            if (str_contains($text, $word)) return 'positif';
         }
 
         // Score normal
